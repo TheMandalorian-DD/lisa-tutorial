@@ -28,7 +28,7 @@ public class IntervallesTest {
         // we specify the analysis that we want to execute
         conf.abstractState = DefaultConfiguration.simpleState(
                 DefaultConfiguration.defaultHeapDomain(),
-                new ValueEnvironment<>(Intervalles.TOP),
+                new ValueEnvironment<>(new RoundingInterval()),
                 DefaultConfiguration.defaultTypeDomain());
 
         conf.openCallPolicy = ReturnTopPolicy.INSTANCE;

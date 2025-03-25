@@ -1,12 +1,20 @@
 package it.unive.lisa.tutorial;
 
 import it.unive.lisa.analysis.Lattice;
+import it.unive.lisa.analysis.SemanticException;
 import it.unive.lisa.analysis.SemanticOracle;
 import it.unive.lisa.analysis.nonrelational.value.BaseNonRelationalValueDomain;
 import it.unive.lisa.program.cfg.ProgramPoint;
+import it.unive.lisa.symbolic.value.Constant;
+import it.unive.lisa.symbolic.value.operator.AdditionOperator;
+import it.unive.lisa.symbolic.value.operator.DivisionOperator;
+import it.unive.lisa.symbolic.value.operator.MultiplicationOperator;
+import it.unive.lisa.symbolic.value.operator.SubtractionOperator;
 import it.unive.lisa.symbolic.value.operator.binary.BinaryOperator;
 import it.unive.lisa.analysis.lattices.Satisfiability;
 import it.unive.lisa.symbolic.value.operator.binary.*;
+import it.unive.lisa.symbolic.value.operator.unary.NumericNegation;
+import it.unive.lisa.symbolic.value.operator.unary.UnaryOperator;
 import it.unive.lisa.util.representation.StringRepresentation;
 import it.unive.lisa.util.representation.StructuredRepresentation;
 
@@ -80,6 +88,11 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
 
     @Override
     public RoundingInterval lubAux(RoundingInterval other) {
+
+        if (this.isBottom() || other.isBottom()) {
+            return bottom();
+        }
+
         // Prendre le mode d'arrondi et la précision du premier intervalle
         return new RoundingInterval(
                 Math.min(this.low, other.low),
@@ -94,6 +107,10 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         final double THRESHOLD = 1000.0; // Seuil ajustable
         double newLow = this.low;
         double newHigh = this.high;
+
+        if (this.isBottom() || other.isBottom()) {
+            return bottom();
+        }
 
         if (other.low < this.low) {
             double diff = this.low - other.low;
@@ -114,23 +131,47 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
 
     @Override
     public boolean lessOrEqualAux(RoundingInterval other) {
+
+        if (this.isBottom() && other.isBottom()) {
+            return true;
+        }
+        if (this.isBottom()) {
+            return true; // ⊥ ≤ tout
+        }
+        if (other.isBottom()) {
+            return false; // rien ≤ ⊥ sauf ⊥
+        }
+
         return other.low <= this.low && this.high <= other.high;
     }
 
     // Méthodes d'opérations arithmétiques avec arrondi
     public RoundingInterval add(RoundingInterval other) {
+        if (this.isBottom() || other.isBottom()) {
+            return bottom();
+        }
+
         double newLow = round(this.low + other.low);
         double newHigh = round(this.high + other.high);
+
         return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
     }
 
     public RoundingInterval sub(RoundingInterval other) {
+        if (this.isBottom() || other.isBottom()) {
+            return bottom();
+        }
+
         double newLow = round(this.low - other.high);
         double newHigh = round(this.high - other.low);
         return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
     }
 
     public RoundingInterval mul(RoundingInterval other) {
+        if (this.isBottom() || other.isBottom()) {
+            return bottom();
+        }
+
         double[] results = new double[]{
                 round(this.low * other.low),
                 round(this.low * other.high),
@@ -147,6 +188,77 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return new RoundingInterval(min, max, this.roundingMode, this.precision);
     }
 
+    public RoundingInterval div(RoundingInterval other) {
+        if (this.isBottom() || other.isBottom()) {
+            return bottom();
+        }
+
+        // Division par zéro
+        if (other.low <= 0 && other.high >= 0) {
+            return bottom();
+        }
+
+        // Calcul de toutes les combinaisons de division
+        double[] results = new double[]{
+                round(this.low / other.low),
+                round(this.low / other.high),
+                round(this.high / other.low),
+                round(this.high / other.high)
+        };
+
+        // Trouver le minimum et le maximum des résultats
+        double min = results[0];
+        double max = results[0];
+        for (double r : results) {
+            min = Math.min(min, r);
+            max = Math.max(max, r);
+        }
+
+        return new RoundingInterval(min, max, this.roundingMode, this.precision);
+    }
+
+    @Override
+    public RoundingInterval evalNonNullConstant(Constant constant, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
+        if (constant.getValue() instanceof Number) {
+            double value = ((Number) constant.getValue()).doubleValue();
+            return new RoundingInterval(value, value, this.roundingMode, this.precision);
+        }
+        return top();
+    }
+
+    @Override
+    public RoundingInterval evalUnaryExpression(UnaryOperator operator, RoundingInterval arg, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
+        if (arg.isBottom()) {
+            return bottom();
+        }
+
+        if (operator instanceof NumericNegation) {
+            double newLow = -arg.high;
+            double newHigh = -arg.low;
+
+            return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
+        }
+
+        return top();
+    }
+
+    @Override
+    public RoundingInterval evalBinaryExpression(BinaryOperator operator, RoundingInterval left, RoundingInterval right, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
+        if (left.isBottom() || right.isBottom()) {
+            return bottom();
+        }
+        if (operator instanceof AdditionOperator) {
+            return add(right);
+        } else if (operator instanceof SubtractionOperator) {
+            return sub(right);
+        } else if (operator instanceof MultiplicationOperator) {
+            return mul(right);
+        } else if (operator instanceof DivisionOperator) {
+            return div(right);
+        }
+        return top();
+    }
+
     @Override
     public Satisfiability satisfiesBinaryExpression(BinaryOperator operator,
                                                     RoundingInterval left,
@@ -154,26 +266,42 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
                                                     ProgramPoint pp,
                                                     SemanticOracle oracle) {
         if (operator.equals(ComparisonLt.INSTANCE)) {
-            if (left.high < right.low) return Satisfiability.SATISFIED;
-            if (left.low >= right.high) return Satisfiability.NOT_SATISFIED;
+            if (left.high < right.low) {
+                return Satisfiability.SATISFIED;
+            }
+            if (left.low >= right.high) {
+                return Satisfiability.NOT_SATISFIED;
+            }
             return Satisfiability.UNKNOWN;
         } else if (operator.equals(ComparisonGt.INSTANCE)) {
-            if (left.low > right.high) return Satisfiability.SATISFIED;
-            if (left.high <= right.low) return Satisfiability.NOT_SATISFIED;
+            if (left.low > right.high) {
+                return Satisfiability.SATISFIED;
+            }
+            if (left.high <= right.low) {
+                return Satisfiability.NOT_SATISFIED;
+            }
             return Satisfiability.UNKNOWN;
         } else if (operator.equals(ComparisonEq.INSTANCE)) {
-            if (left.high < right.low || left.low > right.high) return Satisfiability.NOT_SATISFIED;
+            if (left.high < right.low || left.low > right.high) {
+                return Satisfiability.NOT_SATISFIED;
+            }
             if (Math.abs(left.low - left.high) < Math.pow(10, -precision) &&
                     Math.abs(right.low - right.high) < Math.pow(10, -precision) &&
                     Math.abs(left.low - right.low) < Math.pow(10, -precision))
+            {
                 return Satisfiability.SATISFIED;
+            }
             return Satisfiability.UNKNOWN;
         } else if (operator.equals(ComparisonNe.INSTANCE)) {
-            if (left.high < right.low || left.low > right.high) return Satisfiability.SATISFIED;
+            if (left.high < right.low || left.low > right.high) {
+                return Satisfiability.SATISFIED;
+            }
             if (Math.abs(left.low - left.high) < Math.pow(10, -precision) &&
                     Math.abs(right.low - right.high) < Math.pow(10, -precision) &&
                     Math.abs(left.low - right.low) < Math.pow(10, -precision))
+            {
                 return Satisfiability.NOT_SATISFIED;
+            }
             return Satisfiability.UNKNOWN;
         }
         return Satisfiability.UNKNOWN;
