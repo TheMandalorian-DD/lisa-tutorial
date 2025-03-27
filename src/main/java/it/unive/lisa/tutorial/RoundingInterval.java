@@ -4,224 +4,139 @@ import it.unive.lisa.analysis.Lattice;
 import it.unive.lisa.analysis.SemanticException;
 import it.unive.lisa.analysis.SemanticOracle;
 import it.unive.lisa.analysis.nonrelational.value.BaseNonRelationalValueDomain;
+import it.unive.lisa.analysis.nonrelational.value.ValueEnvironment;
 import it.unive.lisa.program.cfg.ProgramPoint;
 import it.unive.lisa.symbolic.value.Constant;
+import it.unive.lisa.symbolic.value.Identifier;
+import it.unive.lisa.symbolic.value.ValueExpression;
 import it.unive.lisa.symbolic.value.operator.AdditionOperator;
 import it.unive.lisa.symbolic.value.operator.DivisionOperator;
 import it.unive.lisa.symbolic.value.operator.MultiplicationOperator;
 import it.unive.lisa.symbolic.value.operator.SubtractionOperator;
-import it.unive.lisa.symbolic.value.operator.binary.BinaryOperator;
-import it.unive.lisa.analysis.lattices.Satisfiability;
 import it.unive.lisa.symbolic.value.operator.binary.*;
+import it.unive.lisa.analysis.lattices.Satisfiability;
 import it.unive.lisa.symbolic.value.operator.unary.NumericNegation;
 import it.unive.lisa.symbolic.value.operator.unary.UnaryOperator;
 import it.unive.lisa.util.representation.StringRepresentation;
 import it.unive.lisa.util.representation.StructuredRepresentation;
 
+import java.util.List;
+import java.util.Objects;
+
 public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingInterval> {
 
-    // Constantes pour les modes d'arrondi
-    public enum RoundingMode {
-        ROUND_UP,      // Arrondi vers le haut
-        ROUND_DOWN,    // Arrondi vers le bas
-        ROUND_HALF_UP, // Arrondi au plus proche, avec 0.5 arrondi au-dessus
-        ROUND_HALF_DOWN, // Arrondi au plus proche, avec 0.5 arrondi au-dessous
-        ROUND_NEAREST   // Arrondi au point le plus proche
-    }
+    private final DoubleOrInf low;
+    private final DoubleOrInf high;
 
-    private static final double MIN = Double.NEGATIVE_INFINITY;
-    private static final double MAX = Double.POSITIVE_INFINITY;
+    private static final RoundingInterval BOTTOM = new RoundingInterval(DoubleOrInf.POSITIVE_INFINITY, DoubleOrInf.NEGATIVE_INFINITY);
+    private static final RoundingInterval TOP = new RoundingInterval(DoubleOrInf.NEGATIVE_INFINITY, DoubleOrInf.POSITIVE_INFINITY);
 
-    private final double low;
-    private final double high;
-    private final RoundingMode roundingMode;
-    private final int precision; // Nombre de décimales de précision
 
-    // Constructeur par défaut (intervalle max, précision par défaut)
     public RoundingInterval() {
-        this.low = MIN;
-        this.high = MAX;
-        this.roundingMode = RoundingMode.ROUND_HALF_UP;
-        this.precision = 2; // Par défaut, 2 décimales
+        this.low = DoubleOrInf.NEGATIVE_INFINITY;
+        this.high = DoubleOrInf.POSITIVE_INFINITY;
     }
 
-    // Constructeur complet
-    public RoundingInterval(double low, double high, RoundingMode roundingMode, int precision) {
+    public RoundingInterval(DoubleOrInf low, DoubleOrInf high) {
         this.low = low;
         this.high = high;
-        this.roundingMode = roundingMode;
-        this.precision = precision;
-    }
-
-    @Override
-    public RoundingInterval top() {
-        return new RoundingInterval(MIN, MAX, RoundingMode.ROUND_HALF_UP, 2);
     }
 
     @Override
     public RoundingInterval bottom() {
-        return new RoundingInterval(1, 0, RoundingMode.ROUND_HALF_UP, 2);
+        return BOTTOM;
+    }
+
+    @Override
+    public RoundingInterval top() {
+        return TOP;
     }
 
     @Override
     public boolean isTop() {
-        return low == MIN && high == MAX;
+        return this.low.isNegativeInfinity() && this.high.isPositiveInfinity();
     }
 
     @Override
     public boolean isBottom() {
-        return low > high;
-    }
-
-    // Méthode d'arrondi générique
-    private double round(double value) {
-        return switch (roundingMode) {
-            case ROUND_UP -> Math.ceil(value * Math.pow(10, precision)) / Math.pow(10, precision);
-            case ROUND_DOWN -> Math.floor(value * Math.pow(10, precision)) / Math.pow(10, precision);
-            case ROUND_HALF_UP -> Math.round(value * Math.pow(10, precision)) / Math.pow(10, precision);
-            case ROUND_HALF_DOWN ->
-                    Math.signum(value) * Math.floor(Math.abs(value) * Math.pow(10, precision) + 0.5) / Math.pow(10, precision);
-            case ROUND_NEAREST -> Math.rint(value * Math.pow(10, precision)) / Math.pow(10, precision);
-            default -> value;
-        };
+        return this.low.isPositiveInfinity() || this.high.isNegativeInfinity();
     }
 
     @Override
     public RoundingInterval lubAux(RoundingInterval other) {
 
-        if (this.isBottom() || other.isBottom()) {
-            return bottom();
+        if (this.isBottom()) {
+            return other;
         }
 
-        // Prendre le mode d'arrondi et la précision du premier intervalle
+        if (other.isBottom())
+            return this;
+
         return new RoundingInterval(
-                Math.min(this.low, other.low),
-                Math.max(this.high, other.high),
-                this.roundingMode,
-                this.precision
+                DoubleOrInf.min(this.low, other.low),
+                DoubleOrInf.max(this.high, other.high)
         );
     }
 
     @Override
-    public RoundingInterval wideningAux(RoundingInterval other) {
-        final double THRESHOLD = 1000.0; // Seuil ajustable
-        double newLow = this.low;
-        double newHigh = this.high;
+    public RoundingInterval glbAux(RoundingInterval other) throws SemanticException {
 
-        if (this.isBottom() || other.isBottom()) {
+        DoubleOrInf newLow = DoubleOrInf.max(this.low, other.low);
+        DoubleOrInf newHigh = DoubleOrInf.min(this.high, other.high);
+
+        if (this.isBottom() || other.isBottom() || !newLow.lessOrEqual(newHigh)) {
             return bottom();
         }
 
-        if (other.low < this.low) {
-            double diff = this.low - other.low;
-            if (diff > THRESHOLD) {
-                newLow = Math.max(other.low, this.low - THRESHOLD);
-            }
+        return new RoundingInterval(newLow, newHigh);
+
+    }
+
+    @Override
+    public RoundingInterval wideningAux(RoundingInterval other) {
+        if (this.isBottom()) {
+            return other;
         }
 
-        if (other.high > this.high) {
-            double diff = other.high - this.high;
-            if (diff > THRESHOLD) {
-                newHigh = Math.min(other.high, this.high + THRESHOLD);
-            }
+        if (other.isBottom()) {
+            return this;
         }
 
-        return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
+        DoubleOrInf newLow, newHigh;
+        if(other.low.lessThan(this.low)) {
+            newLow = DoubleOrInf.NEGATIVE_INFINITY;
+        } else {
+            newLow = this.low;
+        }
+
+        if(this.high.lessThan(other.high)) {
+            newHigh = DoubleOrInf.POSITIVE_INFINITY;
+        } else {
+            newHigh = this.high;
+        }
+
+        return new RoundingInterval(newLow, newHigh);
     }
 
     @Override
     public boolean lessOrEqualAux(RoundingInterval other) {
 
-        if (this.isBottom() && other.isBottom()) {
+        if (this.isBottom()) {
             return true;
         }
-        if (this.isBottom()) {
-            return true; // ⊥ ≤ tout
-        }
+
         if (other.isBottom()) {
-            return false; // rien ≤ ⊥ sauf ⊥
+            return false;
         }
 
-        return other.low <= this.low && this.high <= other.high;
-    }
-
-    // Méthodes d'opérations arithmétiques avec arrondi
-    public RoundingInterval add(RoundingInterval other) {
-        if (this.isBottom() || other.isBottom()) {
-            return bottom();
-        }
-
-        double newLow = round(this.low + other.low);
-        double newHigh = round(this.high + other.high);
-
-        return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
-    }
-
-    public RoundingInterval sub(RoundingInterval other) {
-        if (this.isBottom() || other.isBottom()) {
-            return bottom();
-        }
-
-        double newLow = round(this.low - other.high);
-        double newHigh = round(this.high - other.low);
-        return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
-    }
-
-    public RoundingInterval mul(RoundingInterval other) {
-        if (this.isBottom() || other.isBottom()) {
-            return bottom();
-        }
-
-        double[] results = new double[]{
-                round(this.low * other.low),
-                round(this.low * other.high),
-                round(this.high * other.low),
-                round(this.high * other.high)
-        };
-
-        double min = results[0], max = results[0];
-        for (double r : results) {
-            min = Math.min(min, r);
-            max = Math.max(max, r);
-        }
-
-        return new RoundingInterval(min, max, this.roundingMode, this.precision);
-    }
-
-    public RoundingInterval div(RoundingInterval other) {
-        if (this.isBottom() || other.isBottom()) {
-            return bottom();
-        }
-
-        // Division par zéro
-        if (other.low <= 0 && other.high >= 0) {
-            return bottom();
-        }
-
-        // Calcul de toutes les combinaisons de division
-        double[] results = new double[]{
-                round(this.low / other.low),
-                round(this.low / other.high),
-                round(this.high / other.low),
-                round(this.high / other.high)
-        };
-
-        // Trouver le minimum et le maximum des résultats
-        double min = results[0];
-        double max = results[0];
-        for (double r : results) {
-            min = Math.min(min, r);
-            max = Math.max(max, r);
-        }
-
-        return new RoundingInterval(min, max, this.roundingMode, this.precision);
+        return other.low.lessOrEqual(this.low) && this.high.lessOrEqual(other.high);
     }
 
     @Override
     public RoundingInterval evalNonNullConstant(Constant constant, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
         if (constant.getValue() instanceof Number) {
             double value = ((Number) constant.getValue()).doubleValue();
-            return new RoundingInterval(value, value, this.roundingMode, this.precision);
+            return new RoundingInterval(new DoubleOrInf(value), new DoubleOrInf(value));
         }
         return top();
     }
@@ -233,10 +148,25 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         }
 
         if (operator instanceof NumericNegation) {
-            double newLow = -arg.high;
-            double newHigh = -arg.low;
+            DoubleOrInf newLow, newHigh;
 
-            return new RoundingInterval(newLow, newHigh, this.roundingMode, this.precision);
+            if(arg.low.isNegativeInfinity()) {
+                newLow = DoubleOrInf.POSITIVE_INFINITY;
+            } else if (arg.low.isPositiveInfinity()) {
+                newLow = DoubleOrInf.NEGATIVE_INFINITY;
+            } else {
+                newLow = new DoubleOrInf(-arg.low.getValue());
+            }
+
+            if(arg.high.isNegativeInfinity()) {
+                newHigh = DoubleOrInf.POSITIVE_INFINITY;
+            } else if (arg.high.isPositiveInfinity()) {
+                newHigh = DoubleOrInf.NEGATIVE_INFINITY;
+            } else {
+                newHigh = new DoubleOrInf(-arg.high.getValue());
+            }
+
+            return new RoundingInterval(newLow, newHigh);
         }
 
         return top();
@@ -248,62 +178,128 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
             return bottom();
         }
         if (operator instanceof AdditionOperator) {
-            return add(right);
+            DoubleOrInf newLow = DoubleOrInf.add(left.low, right.high);
+            DoubleOrInf newHigh = DoubleOrInf.add(left.high, right.high);
+            return new RoundingInterval(newLow, newHigh);
         } else if (operator instanceof SubtractionOperator) {
-            return sub(right);
+            DoubleOrInf newLow = DoubleOrInf.subtract(left.low, right.high);
+            DoubleOrInf newHigh = DoubleOrInf.subtract(left.high, right.low);
+            return new RoundingInterval(newLow, newHigh);
         } else if (operator instanceof MultiplicationOperator) {
-            return mul(right);
+            List<DoubleOrInf> bounds = List.of(
+                    DoubleOrInf.multiply(left.low, right.low),
+                    DoubleOrInf.multiply(left.low, right.high),
+                    DoubleOrInf.multiply(left.high, right.low),
+                    DoubleOrInf.multiply(left.high, right.high)
+            );
+            DoubleOrInf low = bounds.stream().reduce(DoubleOrInf::min).orElse(DoubleOrInf.NEGATIVE_INFINITY);
+            DoubleOrInf high = bounds.stream().reduce(DoubleOrInf::max).orElse(DoubleOrInf.POSITIVE_INFINITY);
+            return new RoundingInterval(low, high);
         } else if (operator instanceof DivisionOperator) {
-            return div(right);
+            // TODO division
         }
         return top();
     }
 
+    @Override
+    public ValueEnvironment<RoundingInterval> assumeBinaryExpression(
+            ValueEnvironment<RoundingInterval> environment,
+            BinaryOperator operator,
+            ValueExpression left,
+            ValueExpression right,
+            ProgramPoint src,
+            ProgramPoint dest,
+            SemanticOracle oracle) throws SemanticException {
+
+        // Validation initiale
+        if (environment == null || operator == null || left == null || right == null) {
+            return environment;
+        }
+
+        // Identification de l'identifiant et évaluation
+        Identifier id = null;
+        RoundingInterval eval;
+        boolean rightIsExpr;
+
+        if (left instanceof Identifier) {
+            eval = eval(right, environment, src, oracle);
+            id = (Identifier) left;
+            rightIsExpr = true;
+        } else if (right instanceof Identifier) {
+            eval = eval(left, environment, src, oracle);
+            id = (Identifier) right;
+            rightIsExpr = false;
+        } else {
+            return environment; // pas d'identifiant
+        }
+
+        // Récupération de l'intervalle existant
+        RoundingInterval starting = environment.getState(id);
+        if (eval.isBottom() || starting.isBottom()) {
+            return environment.bottom();
+        }
+
+        // raffinement
+        RoundingInterval update = null;
+        boolean lowIsMinusInfinity = eval.low.isNegativeInfinity();
+
+        RoundingInterval lowToInf = new RoundingInterval(
+                eval.low,
+                DoubleOrInf.POSITIVE_INFINITY
+        );
+
+        RoundingInterval lowPlusOneToInf = new RoundingInterval(
+                new DoubleOrInf(eval.low.isInfinite() ? eval.low.getValue() : eval.low.getValue() + 1),
+                DoubleOrInf.POSITIVE_INFINITY
+        );
+
+        RoundingInterval negInfToHigh = new RoundingInterval(
+                DoubleOrInf.NEGATIVE_INFINITY,
+                eval.high
+        );
+
+        RoundingInterval negInfToHighMinusOne = new RoundingInterval(
+                DoubleOrInf.NEGATIVE_INFINITY,
+                new DoubleOrInf(eval.high.isInfinite() ? eval.high.getValue() : eval.high.getValue() - 1)
+        );
+
+        if (operator instanceof ComparisonEq) {
+            update = eval;
+        } else if (operator instanceof ComparisonGe) {
+            update = rightIsExpr
+                    ? (lowIsMinusInfinity ? null : starting.glb(lowToInf))
+                    : starting.glb(negInfToHigh);
+        } else if (operator instanceof ComparisonGt) {
+            update = rightIsExpr
+                    ? (lowIsMinusInfinity ? null : starting.glb(lowPlusOneToInf))
+                    : (!eval.isTop() && lowIsMinusInfinity ? eval : starting.glb(negInfToHighMinusOne));
+        } else if (operator instanceof ComparisonLe) {
+            update = rightIsExpr
+                    ? starting.glb(negInfToHigh)
+                    : (lowIsMinusInfinity ? null : starting.glb(lowToInf));
+        } else if (operator instanceof ComparisonLt) {
+            update = rightIsExpr
+                    ? (!eval.isTop() && lowIsMinusInfinity ? eval : starting.glb(negInfToHighMinusOne))
+                    : (lowIsMinusInfinity ? null : starting.glb(lowPlusOneToInf));
+        }
+
+        // Mise à jour de l'environnement
+        if (update == null) {
+            return environment; // Pas de raffinement possible
+        } else if (update.isBottom()) {
+            return environment.bottom(); // Condition contradictoire
+        } else {
+            return environment.putState(id, update);
+        }
+    }
+
+    // TODO
     @Override
     public Satisfiability satisfiesBinaryExpression(BinaryOperator operator,
                                                     RoundingInterval left,
                                                     RoundingInterval right,
                                                     ProgramPoint pp,
                                                     SemanticOracle oracle) {
-        if (operator.equals(ComparisonLt.INSTANCE)) {
-            if (left.high < right.low) {
-                return Satisfiability.SATISFIED;
-            }
-            if (left.low >= right.high) {
-                return Satisfiability.NOT_SATISFIED;
-            }
-            return Satisfiability.UNKNOWN;
-        } else if (operator.equals(ComparisonGt.INSTANCE)) {
-            if (left.low > right.high) {
-                return Satisfiability.SATISFIED;
-            }
-            if (left.high <= right.low) {
-                return Satisfiability.NOT_SATISFIED;
-            }
-            return Satisfiability.UNKNOWN;
-        } else if (operator.equals(ComparisonEq.INSTANCE)) {
-            if (left.high < right.low || left.low > right.high) {
-                return Satisfiability.NOT_SATISFIED;
-            }
-            if (Math.abs(left.low - left.high) < Math.pow(10, -precision) &&
-                    Math.abs(right.low - right.high) < Math.pow(10, -precision) &&
-                    Math.abs(left.low - right.low) < Math.pow(10, -precision))
-            {
-                return Satisfiability.SATISFIED;
-            }
-            return Satisfiability.UNKNOWN;
-        } else if (operator.equals(ComparisonNe.INSTANCE)) {
-            if (left.high < right.low || left.low > right.high) {
-                return Satisfiability.SATISFIED;
-            }
-            if (Math.abs(left.low - left.high) < Math.pow(10, -precision) &&
-                    Math.abs(right.low - right.high) < Math.pow(10, -precision) &&
-                    Math.abs(left.low - right.low) < Math.pow(10, -precision))
-            {
-                return Satisfiability.NOT_SATISFIED;
-            }
-            return Satisfiability.UNKNOWN;
-        }
         return Satisfiability.UNKNOWN;
     }
 
@@ -315,7 +311,148 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         if (isTop()) {
             return Lattice.topRepresentation();
         }
-        String format = "[%." + precision + "f, %." + precision + "f]";
-        return new StringRepresentation(String.format(format, low, high));
+        return new StringRepresentation("[" + low + ", " + high + "]");
     }
+
+    public static class DoubleOrInf {
+        private final boolean isInfinite;
+        private final boolean isNegative;
+
+        private final Double value;
+
+        public static final DoubleOrInf NEGATIVE_INFINITY = new DoubleOrInf(true);
+        public static final DoubleOrInf POSITIVE_INFINITY = new DoubleOrInf(false);
+
+        // Constructor for finite value
+        public DoubleOrInf(Double value) {
+            this.isInfinite = false;
+            this.isNegative = false;
+            this.value = value;
+        }
+
+        // Constructor for infinity
+        private DoubleOrInf(boolean isNegative) {
+            this.isInfinite = true;
+            this.isNegative = isNegative;
+            this.value = isNegative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+        }
+
+        public Double getValue() {
+            return value;
+        }
+
+        public boolean isInfinite() {
+            return isInfinite;
+        }
+
+        public boolean isNegativeInfinity() {
+            return isInfinite && isNegative;
+        }
+
+        public boolean isPositiveInfinity() {
+            return isInfinite && !isNegative;
+        }
+
+        public static DoubleOrInf min(DoubleOrInf a, DoubleOrInf b) {
+            if (a.isNegativeInfinity() || b.isNegativeInfinity())
+                return NEGATIVE_INFINITY;
+
+            if (a.isPositiveInfinity())
+                return b;
+
+            if (b.isPositiveInfinity())
+                return a;
+
+            return new DoubleOrInf(Math.min(a.value, b.value));
+        }
+
+        public static DoubleOrInf max(DoubleOrInf a, DoubleOrInf b) {
+            if (a.isPositiveInfinity() || b.isPositiveInfinity()) return POSITIVE_INFINITY;
+            if (a.isNegativeInfinity()) return b;
+            if (b.isNegativeInfinity()) return a;
+            return new DoubleOrInf(Math.max(a.value, b.value));
+        }
+
+        public static DoubleOrInf add(DoubleOrInf a, DoubleOrInf b) {
+            if (a.isInfinite() || b.isInfinite()) {
+                if (a.isNegativeInfinity() || b.isNegativeInfinity()) return NEGATIVE_INFINITY;
+                return POSITIVE_INFINITY;
+            }
+            return new DoubleOrInf(a.value + b.value);
+        }
+
+        public static DoubleOrInf subtract(DoubleOrInf a, DoubleOrInf b) {
+            if (a.isInfinite() || b.isInfinite()) {
+                if (a.isNegativeInfinity() || b.isPositiveInfinity()) return NEGATIVE_INFINITY;
+                if (a.isPositiveInfinity() || b.isNegativeInfinity()) return POSITIVE_INFINITY;
+            }
+            return new DoubleOrInf(a.value - b.value);
+        }
+
+        public static DoubleOrInf multiply(DoubleOrInf a, DoubleOrInf b) {
+            if (a.isInfinite() || b.isInfinite()) {
+                if ((a.isNegativeInfinity() && b.value < 0) || (b.isNegativeInfinity() && a.value < 0))
+                    return POSITIVE_INFINITY;
+                if ((a.isPositiveInfinity() && b.value < 0) || (b.isPositiveInfinity() && a.value < 0))
+                    return NEGATIVE_INFINITY;
+                return POSITIVE_INFINITY;
+            }
+            return new DoubleOrInf(a.value * b.value);
+        }
+
+        public boolean lessThan(DoubleOrInf other) {
+            if (this.isNegativeInfinity()) return !other.isNegativeInfinity();
+            if (this.isPositiveInfinity()) return false;
+            if (other.isNegativeInfinity()) return false;
+            if (other.isPositiveInfinity()) return true;
+            return this.value < other.value;
+        }
+
+        public boolean lessOrEqual(DoubleOrInf other) {
+            if (this.isNegativeInfinity()) return true;
+            if (this.isPositiveInfinity()) return other.isPositiveInfinity();
+            if (other.isNegativeInfinity()) return false;
+            if (other.isPositiveInfinity()) return true;
+            return this.value <= other.value;
+        }
+
+        @Override
+        public String toString() {
+            if (isNegativeInfinity()) {
+                return "-inf";
+            }
+            if (isPositiveInfinity()) {
+                return "+inf";
+            }
+            return String.valueOf(value);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+
+            if (!(obj instanceof DoubleOrInf other)) {
+                return false;
+            }
+
+            if (this.isInfinite && other.isInfinite) {
+                return this.isNegative == other.isNegative;
+            }
+
+            if (this.isInfinite || other.isInfinite) {
+                return false;
+            }
+
+            return Objects.equals(this.value, other.value);
+        }
+
+        @Override
+        public int hashCode() {
+            return isInfinite ? (isNegative ? -1 : 1) : Objects.hashCode(value);
+        }
+    }
+
+
 }
