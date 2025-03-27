@@ -8,10 +8,11 @@ class setofintegervalues {
 		def d = i / j;
 	}*/
 
-	basic(a) {
+	basic() {
+	    def a = 3;
 	    def x = 0;
 	    while(x < a)
-	        x = x + 1;
+	        x = x + 100;
 	}
 
 	/*severalvalues() {
