@@ -1,0 +1,7 @@
+class product {
+    test() {
+        def x = 5;
+        def y = x - 2;
+        if(y < x) y = y + 1; else y = x;
+    }
+}
