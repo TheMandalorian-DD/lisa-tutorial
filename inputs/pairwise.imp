@@ -1,0 +1,11 @@
+class pairwise {
+	// Tbasic
+        basic(x) {
+            def y = x + 5;
+            def z = y + 5;
+            if (x < z) {
+                def w = z;
+            }
+        }
+
+}
