@@ -15,11 +15,11 @@ public class RoundingInequalityCartesianProduct extends CartesianProduct<Roundin
 
     @Override
     public RoundingInequalityCartesianProduct mk(PairwiseInequalityDomain pairwiseInequalityDomain, ValueEnvironment<RoundingInterval> entries) {
-        return null;
+        return new RoundingInequalityCartesianProduct(pairwiseInequalityDomain, entries);
     }
 
     @Override
     public boolean knowsIdentifier(Identifier identifier) {
-        return false;
+        return left.knowsIdentifier(identifier);
     }
 }
