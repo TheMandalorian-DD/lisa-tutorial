@@ -40,8 +40,8 @@ import it.unive.lisa.util.representation.StructuredRepresentation;
  */
 public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityDomain> {
 
-    private Set<LinearInequality> constraints;
-    private boolean isTop = false;
+    private final Set<LinearInequality> constraints;
+    private boolean isTop;
 
     public static final PairwiseInequalityDomain TOP = new PairwiseInequalityDomain(true);
     public static final PairwiseInequalityDomain BOTTOM = new PairwiseInequalityDomain(false);
@@ -100,7 +100,7 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
         if(isTop() || other.isTop()) return top();
         if(isBottom()) return other;
         if(other.isBottom()) return this;
-        Set<LinearInequality> unionInequalities = new HashSet<>(this.constraints);
+        Set<LinearInequality> unionInequalities = new HashSet<>(constraints);
         unionInequalities.addAll(other.getConstraints());
         return new PairwiseInequalityDomain(unionInequalities);
     }
@@ -118,7 +118,7 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
         if (isBottom() || other.isBottom()) return bottom();
         if (isTop()) return other;
         if (other.isTop()) return this;
-        Set<LinearInequality> result = new HashSet<>(this.constraints);
+        Set<LinearInequality> result = new HashSet<>(constraints);
         result.addAll(other.getConstraints());
         return new PairwiseInequalityDomain(result);
     }
@@ -143,64 +143,63 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
      */
     @Override
     public PairwiseInequalityDomain assign(Identifier identifier, ValueExpression valueExpression, ProgramPoint pp,
-                                         SemanticOracle oracle) throws SemanticException {
-        if(isHeapIdentifier(identifier))
+                                           SemanticOracle oracle) throws SemanticException {
+        if (isHeapIdentifier(identifier)) {
             return this;
+        }
 
-        if(valueExpression instanceof Identifier id){
-            Map<Identifier, Double> coefficients = new HashMap<>();
-            coefficients.put(identifier, 1.0);
-            coefficients.put(id, -1.0);
-            LinearInequality inequality = new LinearInequality(coefficients, 0.0);
-            Set<LinearInequality> res = new HashSet<>(this.constraints);
-            res.add(inequality);
-            return new PairwiseInequalityDomain(res);
+        Map<Identifier, Double> coefficients = new HashMap<>();
+        Set<LinearInequality> updatedConstraints = new HashSet<>(constraints);
+
+        if (valueExpression instanceof Identifier id) {
+            return createSimpleInequality(updatedConstraints, coefficients, identifier, id, 0.0);
         }
+
         if (valueExpression instanceof BinaryExpression binaryExpression) {
-            if (binaryExpression.getOperator() instanceof AdditionOperator && binaryExpression.getLeft() instanceof Identifier leftIdentifier && binaryExpression.getRight() instanceof Constant constant) {
-                Map<Identifier, Double> coefficients = new HashMap<>();
-                coefficients.put(identifier, 1.0);
-                coefficients.put(leftIdentifier, -1.0);
-                LinearInequality inequality = new LinearInequality(coefficients, (Integer) (constant.getValue()));
-                Set<LinearInequality> res = new HashSet<>(this.constraints);
-                res.add(inequality);
-                return new PairwiseInequalityDomain(res);
-            }
-            if (binaryExpression.getOperator() instanceof AdditionOperator && binaryExpression.getRight() instanceof Constant rightConstant) {
-                if ((binaryExpression.getLeft() instanceof BinaryExpression leftExpr)) {
-                    if ((leftExpr.getOperator() instanceof MultiplicationOperator) && leftExpr.getLeft() instanceof Constant constant && leftExpr.getRight() instanceof Identifier rightIdentifier) {
-                        Map<Identifier, Double> coefficients = new HashMap<>();
-                        coefficients.put(identifier, 1.0);
-                        coefficients.put(rightIdentifier, -(Double) constant.getValue());
-                        LinearInequality inequality = new LinearInequality(coefficients, (Integer) (rightConstant.getValue()));
-                        Set<LinearInequality> res = new HashSet<>(this.constraints);
-                        res.add(inequality);
-                        return new PairwiseInequalityDomain(res);
-                    }
+            if (binaryExpression.getOperator() instanceof AdditionOperator) {
+                if (binaryExpression.getLeft() instanceof Identifier leftIdentifier &&
+                        binaryExpression.getRight() instanceof Constant constant) {
+                    return createSimpleInequality(updatedConstraints, coefficients, identifier, leftIdentifier,
+                            (Integer) constant.getValue());
+                }
+                if (binaryExpression.getLeft() instanceof BinaryExpression leftExpr &&
+                        leftExpr.getOperator() instanceof MultiplicationOperator &&
+                        leftExpr.getLeft() instanceof Constant constant &&
+                        leftExpr.getRight() instanceof Identifier rightIdentifier &&
+                        binaryExpression.getRight() instanceof Constant rightConstant) {
+                    return createComplexInequality(updatedConstraints, coefficients, identifier, rightIdentifier,
+                            -(Double) constant.getValue(),
+                            (Integer) rightConstant.getValue());
                 }
             }
-            if (binaryExpression.getOperator() instanceof SubtractionOperator && binaryExpression.getLeft() instanceof Identifier leftIdentifier && binaryExpression.getRight() instanceof Constant constant) {
-                Map<Identifier, Double> coefficients = new HashMap<>();
-                coefficients.put(identifier, 1.0);
-                coefficients.put(leftIdentifier, -1.0);
-                LinearInequality inequality = new LinearInequality(coefficients, -(Integer) (constant.getValue()));
-                Set<LinearInequality> res = new HashSet<>(this.constraints);
-                res.add(inequality);
-                return new PairwiseInequalityDomain(res);
-            }
-            if (binaryExpression.getOperator() instanceof SubtractionOperator && binaryExpression.getRight() instanceof Constant rightConstant) {
-                if ((binaryExpression.getLeft() instanceof Identifier leftIdentifier)) {
-                    Map<Identifier, Double> coefficients = new HashMap<>();
-                    coefficients.put(identifier, 1.0);
-                    coefficients.put(leftIdentifier, -1.0);
-                    LinearInequality inequality = new LinearInequality(coefficients, -(Integer) (rightConstant.getValue()));
-                    Set<LinearInequality> res = new HashSet<>(this.constraints);
-                    res.add(inequality);
-                    return new PairwiseInequalityDomain(res);
-                }
+            if (binaryExpression.getOperator() instanceof SubtractionOperator &&
+                    binaryExpression.getLeft() instanceof Identifier leftIdentifier &&
+                    binaryExpression.getRight() instanceof Constant constant) {
+                return createSimpleInequality(updatedConstraints, coefficients, identifier, leftIdentifier,
+                        -(Integer) constant.getValue());
             }
         }
+
         return this;
+    }
+
+    private PairwiseInequalityDomain createSimpleInequality(Set<LinearInequality> updatedConstraints,
+                                                            Map<Identifier, Double> coefficients,
+                                                            Identifier target, Identifier source, double constant) {
+        coefficients.put(target, 1.0);
+        coefficients.put(source, -1.0);
+        updatedConstraints.add(new LinearInequality(coefficients, constant));
+        return new PairwiseInequalityDomain(updatedConstraints);
+    }
+
+    private PairwiseInequalityDomain createComplexInequality(Set<LinearInequality> updatedConstraints,
+                                                             Map<Identifier, Double> coefficients,
+                                                             Identifier target, Identifier source,
+                                                             double multiplier, double constant) {
+        coefficients.put(target, 1.0);
+        coefficients.put(source, multiplier);
+        updatedConstraints.add(new LinearInequality(coefficients, constant));
+        return new PairwiseInequalityDomain(updatedConstraints);
     }
 
 
@@ -221,18 +220,50 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
         for (LinearInequality currentConstraint : constraints) {
             String key = currentConstraint.coefficients.toString();
 
-            if(constraintMap.containsKey(key)){
-                LinearInequality existingConstraint = constraintMap.get(key);
-                if(currentConstraint.lessOrEqual && existingConstraint.constant > currentConstraint.constant){
-                    constraintMap.put(key, currentConstraint);
-                }
-            } else {
+            constraintMap.putIfAbsent(key, currentConstraint);
+
+            LinearInequality existingConstraint = constraintMap.get(key);
+            if (currentConstraint.lessOrEqual && existingConstraint.constant > currentConstraint.constant) {
                 constraintMap.put(key, currentConstraint);
             }
         }
-        constraints.clear();
-        constraints.addAll(constraintMap.values());
-        return constraints;
+
+        // Transitivity check and adding derived inequalities
+        Set<LinearInequality> closure = new HashSet<>(constraintMap.values());
+        for (LinearInequality c1 : closure) {
+            for (LinearInequality c2 : closure) {
+                if (c1 != c2) {
+                    for (Map.Entry<Identifier, Double> entry : c1.coefficients.entrySet()) {
+                        Identifier sharedIdentifier = entry.getKey();
+                        Double coeff1 = entry.getValue();
+
+                        if (c2.coefficients.containsKey(sharedIdentifier)) {
+                            Double coeff2 = c2.coefficients.get(sharedIdentifier);
+                            if (coeff1 * coeff2 < 0
+                                    && c1.coefficients.size() == 2
+                                    && c2.coefficients.size() == 2) { // Ensure both inequalities involve exactly two variables
+                                Map<Identifier, Double> newCoefficients = new HashMap<>(c1.coefficients);
+                                c2.coefficients.forEach((key, value) ->
+                                        newCoefficients.merge(key, value, Double::sum));
+                                newCoefficients.remove(sharedIdentifier);
+
+                                // Filter out derived inequalities without variables or trivial cases
+                                newCoefficients.values().removeIf(val -> val == 0);
+
+                                if (!newCoefficients.isEmpty()) {
+                                    double newConstant = c1.constant + c2.constant;
+                                    // Ensure non-trivial inequality
+                                    LinearInequality derived = new LinearInequality(newCoefficients, newConstant);
+                                    constraintMap.putIfAbsent(derived.coefficients.toString(), derived);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return new HashSet<>(constraintMap.values());
     }
 
     @Override
@@ -280,45 +311,86 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
             return this;
         }
 
-        if(!(binaryExpression.getOperator() instanceof ComparisonLe)) {
+        if (!(binaryExpression.getOperator() instanceof ComparisonLe)) {
             return this;
         }
 
         SymbolicExpression left = binaryExpression.getLeft();
         SymbolicExpression right = binaryExpression.getRight();
 
+        // Initialize result constraints and coefficient map
         Map<Identifier, Double> coefficients = new HashMap<>();
-        if(left instanceof Identifier leftIdentifier && right instanceof Identifier rightIdentifier){
-            coefficients.put(leftIdentifier, 1.0);
-            coefficients.put(rightIdentifier, -1.0);
-            LinearInequality inequality = new LinearInequality(coefficients, 0.0);
-            Set<LinearInequality> res = new HashSet<>(this.constraints);
-            res.add(inequality);
-            return new PairwiseInequalityDomain(res);
-        }
-        if (left instanceof BinaryExpression leftExpr && right instanceof Constant rightConstant) {
-            Integer constant = (Integer) rightConstant.getValue();
-            if (leftExpr.getOperator() instanceof AdditionOperator && leftExpr.getLeft() instanceof BinaryExpression && leftExpr.getRight() instanceof BinaryExpression) {
-                SymbolicExpression ax = leftExpr.getLeft();
-                SymbolicExpression by = leftExpr.getRight();
-                BinaryExpression axExpr = (BinaryExpression) ax;
-                BinaryExpression byExpr = (BinaryExpression) by;
-                if(axExpr.getOperator() instanceof MultiplicationOperator && byExpr.getOperator() instanceof MultiplicationOperator && axExpr.getLeft() instanceof Constant && axExpr.getRight() instanceof Identifier) {
-                    SymbolicExpression a = axExpr.getLeft();
-                    SymbolicExpression x = axExpr.getRight();
-                    SymbolicExpression b = byExpr.getLeft();
-                    SymbolicExpression y = byExpr.getRight();
-                    coefficients.put((Identifier) y, ((Integer)((Constant) b).getValue()).doubleValue());
-                    coefficients.put((Identifier) x, ((Integer)((Constant) a).getValue()).doubleValue());
-                    LinearInequality inequality = new LinearInequality(coefficients, constant);
-                    Set<LinearInequality> res = new HashSet<>(this.constraints);
-                    res.add(inequality);
-                    return new PairwiseInequalityDomain(res);
-                }
+        Set<LinearInequality> updatedConstraints = new HashSet<>(this.constraints);
 
-
-            }
+        if (left instanceof Identifier leftIdentifier && right instanceof Identifier rightIdentifier) {
+            return handleSimpleIdentifiers(updatedConstraints, coefficients, leftIdentifier, rightIdentifier);
         }
+
+        if (left instanceof BinaryExpression lhsExpression && right instanceof Constant rhsConstant) {
+            return handleComplexExpression(updatedConstraints, coefficients, lhsExpression, rhsConstant);
+        }
+
+        return this;
+    }
+
+    private PairwiseInequalityDomain handleSimpleIdentifiers(
+            Set<LinearInequality> updatedConstraints,
+            Map<Identifier, Double> coefficients,
+            Identifier leftIdentifier,
+            Identifier rightIdentifier) {
+
+        coefficients.put(leftIdentifier, 1.0);
+        coefficients.put(rightIdentifier, -1.0);
+
+        LinearInequality inequality = new LinearInequality(coefficients, 0.0);
+        updatedConstraints.add(inequality);
+
+        return new PairwiseInequalityDomain(updatedConstraints);
+    }
+
+    private PairwiseInequalityDomain handleComplexExpression(
+            Set<LinearInequality> updatedConstraints,
+            Map<Identifier, Double> coefficients,
+            BinaryExpression lhsExpression,
+            Constant rhsConstant) throws SemanticException {
+
+        if (!(rhsConstant.getValue() instanceof Integer constantValue)) {
+            return this; // Ignore non-integer constants
+        }
+
+        if (lhsExpression.getOperator() instanceof AdditionOperator &&
+                lhsExpression.getLeft() instanceof BinaryExpression axExpression &&
+                lhsExpression.getRight() instanceof BinaryExpression byExpression) {
+
+            return handleAdditionOperator(updatedConstraints, coefficients, axExpression, byExpression, constantValue);
+        }
+
+        return this;
+    }
+
+    private PairwiseInequalityDomain handleAdditionOperator(
+            Set<LinearInequality> updatedConstraints,
+            Map<Identifier, Double> coefficients,
+            BinaryExpression axExpression,
+            BinaryExpression byExpression,
+            int constantValue) throws SemanticException {
+
+        if (axExpression.getOperator() instanceof MultiplicationOperator &&
+                byExpression.getOperator() instanceof MultiplicationOperator &&
+                axExpression.getLeft() instanceof Constant a &&
+                axExpression.getRight() instanceof Identifier x &&
+                byExpression.getLeft() instanceof Constant b &&
+                byExpression.getRight() instanceof Identifier y) {
+
+            coefficients.put(y, ((Integer) b.getValue()).doubleValue());
+            coefficients.put(x, ((Integer) a.getValue()).doubleValue());
+
+            LinearInequality inequality = new LinearInequality(coefficients, (double) constantValue);
+            updatedConstraints.add(inequality);
+
+            return new PairwiseInequalityDomain(updatedConstraints);
+        }
+
         return this;
     }
 
@@ -354,10 +426,8 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
 
     @Override
     public StructuredRepresentation representation() {
-        if(isTop())
-            return new StringRepresentation(Lattice.topRepresentation());
-        if(isBottom())
-            return new StringRepresentation(Lattice.bottomRepresentation());
+        if(isTop()) return Lattice.topRepresentation();
+        if(isBottom()) return Lattice.bottomRepresentation();
         return new StringRepresentation(toString());
     }
 
@@ -376,14 +446,11 @@ public class PairwiseInequalityDomain implements ValueDomain<PairwiseInequalityD
         public Map<Identifier, Double> coefficients;
         public boolean lessOrEqual = true;
         // Constante c dans ax + by ≤ c
-        private double constant;
+        private final Double constant;
 
-        public LinearInequality(Map<Identifier, Double> coefficients, double constant) {
+        public LinearInequality(Map<Identifier, Double> coefficients, Double constant) {
             this.coefficients = new HashMap<>(coefficients);
             this.constant = constant;
-        }
-        public void setLessOrEqual(boolean lessOrEqual) {
-            this.lessOrEqual = lessOrEqual;
         }
 
         @Override
