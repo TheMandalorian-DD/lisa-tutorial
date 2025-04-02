@@ -23,6 +23,26 @@ import it.unive.lisa.util.representation.StructuredRepresentation;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * The {@code RoundingInterval} class represents an interval with potential
+ * infinite bounds. It is designed for use in abstract interpretation and
+ * program analysis. This class provides methods for interval operations,
+ * such as computing the least upper bound, greatest lower bound, and
+ * widening. It also includes evaluation methods for constants, unary
+ * expressions, and binary expressions.
+ *
+ * Class fields:
+ * - {@code low}: The lower bound of the interval, which is an instance of {@code DoubleOrInf}.
+ * - {@code high}: The upper bound of the interval, which is an instance of {@code DoubleOrInf}.
+ * - {@code BOTTOM}: Represents the bottom element in the lattice.
+ * - {@code TOP}: Represents the top element in the lattice.
+ *
+ * Superclasses:
+ * - {@code java.lang.Object}: The root class of the Java class hierarchy.
+ * - {@code it.unive.lisa.analysis.nonrelational.value.BaseNonRelationalValueDomain}:
+ *   Provides a skeleton implementation of a non-relational value domain,
+ *   supporting lattice operations.
+ */
 public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingInterval> {
 
     private final DoubleOrInf low;
@@ -62,6 +82,15 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return this.low.isPositiveInfinity() || this.high.isNegativeInfinity();
     }
 
+    /**
+     * Computes the least upper bound (lub) of this RoundingInterval and another
+     * RoundingInterval. The lub is essentially the smallest interval that contains
+     * both this interval and the other interval.
+     *
+     * @param other the other RoundingInterval to compute the lub with
+     * @return a new RoundingInterval representing the least upper bound of this
+     *         RoundingInterval and the given RoundingInterval
+     */
     @Override
     public RoundingInterval lubAux(RoundingInterval other) {
 
@@ -78,6 +107,16 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         );
     }
 
+    /**
+     * Computes the greatest lower bound (glb) of this RoundingInterval and another
+     * RoundingInterval. The glb is essentially the largest interval that is fully
+     * contained within both this interval and the other interval.
+     *
+     * @param other the other RoundingInterval to compute the glb with
+     * @return a new RoundingInterval representing the greatest lower bound of this
+     *         RoundingInterval and the given RoundingInterval
+     * @throws SemanticException if an error occurs during computation
+     */
     @Override
     public RoundingInterval glbAux(RoundingInterval other) throws SemanticException {
 
@@ -92,6 +131,17 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
 
     }
 
+    /**
+     * Computes the widening operation between this RoundingInterval and another
+     * RoundingInterval. Widening is an operation that produces a new interval
+     * that is a safe approximation covering both of the given intervals, with
+     * potentially less precision.
+     *
+     * @param other the other RoundingInterval to compute the widening with
+     * @return a new RoundingInterval representing the widened interval that
+     *         safely encompasses both this RoundingInterval and the given
+     *         RoundingInterval
+     */
     @Override
     public RoundingInterval wideningAux(RoundingInterval other) {
         if (this.isBottom()) {
@@ -118,6 +168,15 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return new RoundingInterval(newLow, newHigh);
     }
 
+    /**
+     * Determines whether this RoundingInterval is less than or equal to another
+     * RoundingInterval. The comparison is based on the lower and upper bounds of
+     * the intervals, and whether either of the intervals is at the bottom value.
+     *
+     * @param other the RoundingInterval to compare with
+     * @return true if this RoundingInterval is less than or equal to the other
+     *         RoundingInterval, otherwise false
+     */
     @Override
     public boolean lessOrEqualAux(RoundingInterval other) {
 
@@ -132,6 +191,21 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return other.low.lessOrEqual(this.low) && this.high.lessOrEqual(other.high);
     }
 
+    /**
+     * Evaluates a non-null constant within the context of a program point
+     * and a semantic oracle to determine its corresponding rounding interval.
+     * If the constant's value is a {@code Number}, a new {@link RoundingInterval}
+     * is generated with bounds being the precise value of the constant.
+     * Otherwise, it evaluates to a top interval.
+     *
+     * @param constant the constant to evaluate, which must be non-null
+     * @param pp the program point where the evaluation occurs
+     * @param oracle the semantic oracle providing additional context for the evaluation
+     * @return a {@link RoundingInterval} representing the evaluation of the constant.
+     *         If the constant represents a number, the interval's bounds are set
+     *         to the numeric value. Otherwise, the top interval is returned.
+     * @throws SemanticException if an error occurs during the evaluation
+     */
     @Override
     public RoundingInterval evalNonNullConstant(Constant constant, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
         if (constant.getValue() instanceof Number) {
@@ -141,6 +215,16 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return top();
     }
 
+    /**
+     * Evaluates a unary expression represented by the given operator on the provided argument.
+     *
+     * @param operator the unary operator to be applied
+     * @param arg the argument on which the operator is applied, represented as a {@code RoundingInterval}
+     * @param pp the program point during the evaluation
+     * @param oracle an instance of {@code SemanticOracle} providing additional semantic information for evaluation
+     * @return the resulting {@code RoundingInterval} after applying the unary operator
+     * @throws SemanticException if an error occurs during the evaluation of the unary expression
+     */
     @Override
     public RoundingInterval evalUnaryExpression(UnaryOperator operator, RoundingInterval arg, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
         if (arg.isBottom()) {
@@ -172,6 +256,20 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return top();
     }
 
+    /**
+     * Evaluates a binary expression represented by the given operator between two
+     * {@code RoundingInterval} instances within a specific program point and semantic
+     * context. The result is a new {@code RoundingInterval} representing the outcome
+     * of the operation.
+     *
+     * @param operator the binary operator to be applied
+     * @param left the left operand of the binary expression, represented as a {@code RoundingInterval}
+     * @param right the right operand of the binary expression, represented as a {@code RoundingInterval}
+     * @param pp the program point during the evaluation
+     * @param oracle an instance of {@code SemanticOracle} providing additional semantic information for evaluation
+     * @return the resulting {@code RoundingInterval} after applying the binary operator
+     * @throws SemanticException if an error occurs during the evaluation of the binary expression
+     */
     @Override
     public RoundingInterval evalBinaryExpression(BinaryOperator operator, RoundingInterval left, RoundingInterval right, ProgramPoint pp, SemanticOracle oracle) throws SemanticException {
         if (left.isBottom() || right.isBottom()) {
@@ -201,6 +299,28 @@ public class RoundingInterval implements BaseNonRelationalValueDomain<RoundingIn
         return top();
     }
 
+    /**
+     * Assumes a binary expression by refining the state of the given environment
+     * based on the provided operator, operands, and program points. This method
+     * updates the environment with the refined state of the identifier involved
+     * in the binary operator expression.
+     *
+     * @param environment the current {@code ValueEnvironment<RoundingInterval>}
+     *                    to refine
+     * @param operator the {@code BinaryOperator} used in the binary expression
+     * @param left the left operand of the binary expression, represented as a
+     *             {@code ValueExpression}
+     * @param right the right operand of the binary expression, represented as a
+     *              {@code ValueExpression}
+     * @param src the source {@code ProgramPoint} of the expression
+     * @param dest the destination {@code ProgramPoint} of the expression
+     * @param oracle the {@code SemanticOracle} providing additional semantic
+     *               information for the analysis
+     * @return the updated {@code ValueEnvironment<RoundingInterval>} with the
+     *         refined state or the original environment if no refinement is
+     *         possible
+     * @throws SemanticException if an error occurs during the refinement process
+     */
     @Override
     public ValueEnvironment<RoundingInterval> assumeBinaryExpression(
             ValueEnvironment<RoundingInterval> environment,

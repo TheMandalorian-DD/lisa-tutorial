@@ -6,13 +6,11 @@ import org.junit.Test;
 import it.unive.lisa.AnalysisException;
 import it.unive.lisa.DefaultConfiguration;
 import it.unive.lisa.LiSA;
-import it.unive.lisa.analysis.nonrelational.value.ValueEnvironment;
 import it.unive.lisa.conf.LiSAConfiguration;
 import it.unive.lisa.conf.LiSAConfiguration.GraphType;
 import it.unive.lisa.imp.IMPFrontend;
 import it.unive.lisa.imp.ParsingException;
 import it.unive.lisa.program.Program;
-import it.unive.lisa.tutorial.PairwiseInequalityDomain;
 
 public class PairwiseInequalityDomainTest {
 
@@ -33,7 +31,7 @@ public class PairwiseInequalityDomainTest {
         // Sélection du domaine abstrait avec ton domaine custom
         conf.abstractState = DefaultConfiguration.simpleState(
                 new FieldSensitivePointBasedHeap(),
-                new PairwiseInequalityDomain(),
+                PairwiseInequalityDomain.TOP,
                 DefaultConfiguration.defaultTypeDomain());
 
         // Création et exécution de LiSA

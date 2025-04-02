@@ -1,11 +1,55 @@
 class pairwise {
-	// Tbasic
-        basic(x) {
-            def y = x + 5;
-            def z = y + 5;
-            if (x < z) {
-                def w = z;
-            }
+
+    basic(){
+        def x = 0;
+        def z = 1;
+        def y = x + 5;
+        y = x + 3;
+        x = z + 5;
+        def u = z - 4;
+        if((3*x+2*y) <= 3){
+            def d=3;
         }
+        if(x <= y){
+            def d=3;
+        }
+    }
+    /*
+    complex(){
+        def a = 1;
+        def b = 2;
+        def c = 5;
+        def x = 1;
+        def y = 1;
+        def d = (a*x + b*y)  < c;
+
+        if((3*x+2*y) <= 3){
+            d = 1;
+            def z= 2;
+        }
+        else {
+
+            if(( 1*x + 2*y) <= 3)
+                d=2;
+            def z=3;
+        }
+
+
+    }
+
+    nested(){
+        def a = 1;
+        def b = 2;
+        def c = 5;
+        def x = 1;
+        def y = 1;
+        def d = (a*x + b*y)  < c;
+        if((3*x+2*y) <= 3){
+            d = 1;
+            if((0*x+2*y) <= 3)
+                d=2;
+        }
+    }
+    */
 
 }
