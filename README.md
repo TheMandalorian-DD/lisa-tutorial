@@ -1,48 +1,127 @@
-# Rapport TAS
 
-Ce document fournit une brève explication des modules **`RoundingInterval`** et **`PairwiseInequalityDomain`**, qui font partie d'une bibliothèque ou d'un projet relatif aux domaines d'interprétation abstraite.
+# 🎓 Sorbonne Université – M2 STL – Année 2024–2025
+**Groupe :** Mélissa LATEB & Darko DJORDJEVIC  
+**Encadrant :** M. Renaud  
+**Module :** Techniques d’Analyse Statique (TAS)  
+**Projet :** Développement de domaines abstraits dans le framework LiSA
+
+Ce document fournit une explication détaillée des modules **`RoundingInterval`** et **`PairwiseInequalityDomain`**, développés dans le cadre du projet LiSA Tutorial. Ces deux domaines d’interprétation abstraite ont été conçus pour améliorer la précision et la pertinence des analyses statiques en tenant compte à la fois des valeurs numériques arrondies et des relations linéaires entre variables.
+
+
 
 ---
-
 ## RoundingInterval
 
-Le **`RoundingInterval`** représente une interface ou une implémentation utilisée dans le cadre de l'interprétation abstraite pour modéliser des plages de valeurs continues.
+Le **`RoundingInterval`** est un domaine non relationnel basé sur les intervalles numériques, enrichi d’une logique d’arrondi. Il vise à représenter avec précision les plages de valeurs possibles d’une variable, tout en modélisant les effets des erreurs d’arrondi sur les opérations arithmétiques.
 
-### Caractéristiques principales :
-- **Concept de plage arrondie :** Ce modèle est utilisé pour représenter des intervalles de valeurs numériques, où les limites inférieure et supérieure de l'intervalle peuvent être arrondies à des valeurs proches, selon certaines restrictions imposées.
-- **Cas d'utilisation principal :** Utile pour des analyses statiques ou des calculs nécessitant de tenir compte de l'approximation dans les calculs numériques (par exemple, gestion des erreurs d'arrondi induites par des opérations sur des floats ou doubles).
-- **Opérations prises en charge :**
-    - Comparaisons entre intervalles (chevauchement, inclusion).
-    - Ajustement dynamique des limites pour incorporer une précision accrue ou des intervalles élargis.
+### Caractéristiques principales
 
-Ce type d'intervalle simplifie la manipulation et l'analyse de contraintes linéaires ou faiblement délimitées.
+- **Plage numérique avec arrondi contrôlé :**  
+  Chaque variable est représentée par un intervalle `[a, b]` dont les bornes sont affectées par :
+  - une **précision configurable** (nombre de décimales),
+  - un **mode d’arrondi** (`UP`, `DOWN`, `HALF_EVEN`, etc.).
+
+- **Règles d’évaluation précises :**  
+  Les opérations arithmétiques sont effectuées sur les bornes des intervalles, suivies d’un arrondi appliqué avec précision selon les paramètres définis.
+
+- **Gestion des cas limites :**
+  - Division par zéro
+  - Infinités positives et négatives
+  - Inclusion de zéro dans un intervalle
+
+- **Support des boucles via widening/narrowing :**  
+  L’opérateur de widening permet de détecter les tendances de croissance et d'assurer la terminaison de l’analyse.
+
+### Exemple d’utilisation
+
+```scala
+def x = 2.4;
+def y = x + 3.1;
+// Résultat : y ∈ [5.5, 5.5] (précision = 1, mode = HALF_EVEN)
+
+def a = 0.0;
+while (a < 10.0) {
+    a = a + 0.1;
+}
+// Résultat après widening : a ∈ [0.0, +∞]
+```
+
+### Avantages
+
+- Très utile pour les programmes manipulant des **valeurs flottantes**.
+- Permet de **quantifier l’imprécision numérique** due aux erreurs d’arrondi.
+- Adapté à l’analyse de logiciels embarqués, bancaires ou scientifiques où la précision est critique.
 
 ---
 
 ## PairwiseInequalityDomain
 
-Le **`PairwiseInequalityDomain`** modèle un domaine basé sur des inégalités linéaires entre paires de variables. Ce domaine est conçu spécifiquement pour l’interprétation abstraite dans les analyses statiques.
+Le **`PairwiseInequalityDomain`** est un domaine relationnel basé sur un sous-ensemble restreint mais expressif des contraintes linéaires. Il modélise des relations du type **`a * x + b * y ≤ c`**, où `x` et `y` sont des variables du programme.
 
-### Points clés :
-- **Inégalités linéaires :** Ce domaine suit un ensemble de contraintes définissant des relations du type :
-    - Inférieur à (`<`), supérieur à (`>`), égalité (`=`), etc.
-    - Ces relations sont appliquées entre des identifiants (variables) et des constantes.
-- **Structure de treillis :**
-    - Les entités principales sont **Top** (le cas le plus général, aucune contrainte) et **Bottom** (conflit, contraintes incompatibles).
-    - Fournit des opérations pour calculer la **plus petite borne supérieure (LUB)** ou la **plus grande borne inférieure (GLB)** entre deux domaines.
-- **Fonctionnalités clés :**
-    - **Affectation de valeurs :** Ajoute des contraintes lors de l’attribution de valeurs (identifiants, expressions binaires, constantes).
-    - **Assomptions et simplifications de contraintes :** Permet de traiter efficacement des relations complexes pour optimiser l'analyse.
-- **Application :** Utilisé pour analyser les relations entre variables dans un programme et détecter des incohérences ou des optimisations potentielles.
+### Fondements théoriques
+
+Basé sur l’article :
+> Axel Simon, Andy King, Jacob M. Howe — *Two Variables per Linear Inequality as an Abstract Domain* (2002)
+
+Ce domaine offre un compromis puissant entre **expressivité relationnelle** et **efficacité computationnelle**, sans atteindre la complexité des polyèdres convexes.
+
+### Fonctionnalités clés
+
+- **Représentation compacte :**  
+  Chaque contrainte est une inégalité linéaire impliquant **au plus deux variables**.
+
+- **Propagation des contraintes :**
+  - Lors d’une affectation, le domaine génère ou met à jour les relations linéaires existantes.
+  - Lors d’une condition, les hypothèses sont ajoutées et simplifiées pour affiner l’état abstrait.
+
+- **Structure de treillis complète :**
+  - **Top** : état sans information (absence de contraintes)
+  - **Bottom** : conflit ou ensemble vide (contradiction)
+  - **Join (⊔)** : union des contraintes compatibles
+  - **Widening** : perte contrôlée de précision pour garantir la convergence
+
+### Exemple d’analyse
+
+```scala
+def x = 5;
+def y = 3;
+if (x <= y + 2) {
+    def z = x + 1;
+}
+// Le domaine infère : x - y ≤ 2, donc z - y ≤ 3
+```
+
+### Cas de boucle
+
+```scala
+def i = 0;
+def j = 10;
+while (i < j) {
+    i = i + 1;
+    j = j - 1;
+}
+// Après stabilisation : i + j = 10
+```
+
+### Difficultés techniques
+
+- **Représentation canonique des contraintes**
+- **Détection de redondances et de contradictions**
+- **Précision perdue dans les joins multiples**
 
 ---
 
 ## Comparaison et Complémentarité
 
-- **`RoundingInterval`** et **`PairwiseInequalityDomain`** sont souvent utilisés conjointement dans des systèmes d’analyse statique.
-    - Le premier gère les intervalles approchés pour modéliser les **valeurs possibles d’une variable**, tandis que le second formalise les **relations relatives entre variables**.
-- Ensemble, ils permettent de raisonner efficacement sur les propriétés numériques d’un programme tout en tenant compte des contraintes imposées par ses instructions.
+| Critère                     | `RoundingInterval`                         | `PairwiseInequalityDomain`                   |
+|----------------------------|--------------------------------------------|----------------------------------------------|
+| Type de domaine            | Non relationnel                            | Relationnel (binaire)                        |
+| Représentation             | Intervalle `[a, b]` avec précision & arrondi | Inégalité linéaire `a * x + b * y ≤ c`       |
+| Suivi des relations        | Aucun lien entre variables                 | Relations entre paires de variables          |
+| Avantage principal         | Haute précision sur les valeurs            | Détection fine des dépendances linéaires     |
+| Limite                    | Aucun lien inter-variable                  | Pas de suivi des valeurs absolues            |
 
----
+Ces deux domaines sont **hautement complémentaires** :
 
-Pour plus de détails, veuillez consulter la documentation associée ou explorer l'implémentation des classes concernées dans le code source.
+- `RoundingInterval` fournit une **approximation des valeurs** possibles pour chaque variable.
+- `PairwiseInequalityDomain` modélise les **relations entre variables**, ce qui permet une analyse plus fine lorsque les deux sont combinés.
