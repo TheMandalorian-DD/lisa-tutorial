@@ -1,5 +1,5 @@
 
-# 🎓 Sorbonne Université – M2 STL – Année 2024–2025
+~~# 🎓 Sorbonne Université – M2 STL – Année 2024–2025
 **Groupe :** Mélissa LATEB & Darko DJORDJEVIC  
 **Encadrant :** Pietro Ferrara 
 **Module :** Techniques d’Analyse Statique (TAS)  
@@ -125,3 +125,30 @@ Ces deux domaines sont **hautement complémentaires** :
 
 - `RoundingInterval` fournit une **approximation des valeurs** possibles pour chaque variable.
 - `PairwiseInequalityDomain` modélise les **relations entre variables**, ce qui permet une analyse plus fine lorsque les deux sont combinés.
+
+### Produit cartésien
+
+Nous avons débuté l’implémentation d’un **produit cartésien personnalisé** nommé `RoundingInequalityCartesianProduct`, combinant les deux domaines `RoundingInterval` et `PairwiseInequalityDomain` dans un environnement unique.
+
+Ce produit a pour objectif de cumuler :
+- la **précision numérique** du domaine `RoundingInterval`,
+- avec la **richesse relationnelle** du domaine `PairwiseInequalityDomain`.
+
+Il s’appuie sur l’infrastructure `CartesianProduct` du framework LiSA et respecte l’interface `ValueDomain`.
+
+#### État actuel
+
+> ⚠️ Le produit cartésien est **encore en développement** et **n’est pas pleinement fonctionnel à ce stade**.
+
+- La classe Java est implémentée et compilable.
+- Les tests d’analyse se lancent sans erreur, mais **les résultats produits sont incomplets ou absents**.
+- Les contraintes issues de `PairwiseInequalityDomain` ne s’affichent pas encore dans les graphes générés.
+- Des investigations sont en cours pour comprendre et corriger ce comportement.
+
+#### Prochaines étapes
+
+- Élargir les cas de test `.imp` pour mieux stimuler les deux sous-domaines.
+- Valider que les contraintes des deux domaines sont bien conservées et combinées.
+- Vérifier l’impact du produit sur la précision et la terminaison des analyses dans LiSA.
+
+Ce travail reste une **preuve de concept prometteuse**, posant les fondations pour des analyses hybrides plus puissantes dans le futur.
