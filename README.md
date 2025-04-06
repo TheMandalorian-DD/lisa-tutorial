@@ -1,7 +1,7 @@
 
 # 🎓 Sorbonne Université – M2 STL – Année 2024–2025
 **Groupe :** Mélissa LATEB & Darko DJORDJEVIC  
-**Encadrant :** M. Renaud  
+**Encadrant :** Pietro Ferrara 
 **Module :** Techniques d’Analyse Statique (TAS)  
 **Projet :** Développement de domaines abstraits dans le framework LiSA
 
