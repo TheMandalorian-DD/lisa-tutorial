@@ -2,7 +2,7 @@
 ~~# 🎓 Sorbonne Université – M2 STL – Année 2024–2025
 **Groupe :** Mélissa LATEB & Darko DJORDJEVIC  
 **Encadrant :** Pietro Ferrara 
-**Module :** Techniques d’Analyse Statique (TAS)  
+**Module :** Typage et Analyse Statique (TAS)  
 **Projet :** Développement de domaines abstraits dans le framework LiSA
 
 Ce document fournit une explication détaillée des modules **`RoundingInterval`** et **`PairwiseInequalityDomain`**, développés dans le cadre du projet LiSA Tutorial. Ces deux domaines d’interprétation abstraite ont été conçus pour améliorer la précision et la pertinence des analyses statiques en tenant compte à la fois des valeurs numériques arrondies et des relations linéaires entre variables.
@@ -16,13 +16,8 @@ Le **`RoundingInterval`** est un domaine non relationnel basé sur les intervall
 
 ### Caractéristiques principales
 
-- **Plage numérique avec arrondi contrôlé :**  
-  Chaque variable est représentée par un intervalle `[a, b]` dont les bornes sont affectées par :
-  - une **précision configurable** (nombre de décimales),
-  - un **mode d’arrondi** (`UP`, `DOWN`, `HALF_EVEN`, etc.).
-
 - **Règles d’évaluation précises :**  
-  Les opérations arithmétiques sont effectuées sur les bornes des intervalles, suivies d’un arrondi appliqué avec précision selon les paramètres définis.
+  Les opérations arithmétiques sont effectuées sur les bornes des intervalles.
 
 - **Gestion des cas limites :**
   - Division par zéro
@@ -37,7 +32,7 @@ Le **`RoundingInterval`** est un domaine non relationnel basé sur les intervall
 ```scala
 def x = 2.4;
 def y = x + 3.1;
-// Résultat : y ∈ [5.5, 5.5] (précision = 1, mode = HALF_EVEN)
+// Résultat : y ∈ [5.5, 5.5]
 
 def a = 0.0;
 while (a < 10.0) {
