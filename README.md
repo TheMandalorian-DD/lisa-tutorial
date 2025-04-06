@@ -145,10 +145,3 @@ Il s’appuie sur l’infrastructure `CartesianProduct` du framework LiSA et res
 - Les contraintes issues de `PairwiseInequalityDomain` ne s’affichent pas encore dans les graphes générés.
 - Des investigations sont en cours pour comprendre et corriger ce comportement.
 
-#### Prochaines étapes
-
-- Élargir les cas de test `.imp` pour mieux stimuler les deux sous-domaines.
-- Valider que les contraintes des deux domaines sont bien conservées et combinées.
-- Vérifier l’impact du produit sur la précision et la terminaison des analyses dans LiSA.
-
-Ce travail reste une **preuve de concept prometteuse**, posant les fondations pour des analyses hybrides plus puissantes dans le futur.
